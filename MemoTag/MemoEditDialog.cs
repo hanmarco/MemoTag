@@ -4,6 +4,7 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Markup;
 using System.Windows.Media;
+using System.Windows.Threading;
 using Button = System.Windows.Controls.Button;
 using Color = System.Windows.Media.Color;
 using ComboBox = System.Windows.Controls.ComboBox;
@@ -28,6 +29,10 @@ public sealed class MemoEditDialog : Window
     private readonly ComboBox _presetBox;
     private readonly Color _initialColor;
     private readonly IntPtr _targetHandle;
+    private readonly DispatcherTimer _overlayTimer;
+    private TargetOverlayWindow? _targetOverlay;
+    private bool _overlayDepthApplied;
+    private NativeMethods.Rect? _lastOverlayRect;
 
     public MarkerEditResult Result { get; private set; } = new(MarkerDialogAction.Cancel, string.Empty, Presets[0].Color);
 
@@ -35,6 +40,11 @@ public sealed class MemoEditDialog : Window
     {
         _targetHandle = targetHandle;
         _initialColor = currentColor;
+        _overlayTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(80)
+        };
+        _overlayTimer.Tick += (_, _) => UpdateTargetOverlay();
 
         Title = allowRemove ? "MemoTag 메시지 수정" : "MemoTag 메시지 설정";
         Width = 360;
@@ -46,6 +56,9 @@ public sealed class MemoEditDialog : Window
         WindowStyle = WindowStyle.None;
         Background = WpfBrushes.Transparent;
         AllowsTransparency = true;
+
+        SourceInitialized += (_, _) => StartTargetOverlay();
+        Closed += (_, _) => StopTargetOverlay();
 
         var rootBorder = new Border
         {
@@ -217,6 +230,94 @@ public sealed class MemoEditDialog : Window
 
         Left = screenTopLeft.X + ((screenSize.X - width) / 2);
         Top = screenTopLeft.Y + ((screenSize.Y - height) / 2);
+    }
+
+    private void StartTargetOverlay()
+    {
+        if (_targetHandle == IntPtr.Zero)
+        {
+            return;
+        }
+
+        _targetOverlay = new TargetOverlayWindow();
+        UpdateTargetOverlay();
+        _overlayTimer.Start();
+    }
+
+    private void StopTargetOverlay()
+    {
+        _overlayTimer.Stop();
+
+        if (_targetOverlay is null)
+        {
+            return;
+        }
+
+        _targetOverlay.Close();
+        _targetOverlay = null;
+    }
+
+    private void UpdateTargetOverlay()
+    {
+        if (_targetOverlay is null)
+        {
+            return;
+        }
+
+        if (!NativeMethods.IsWindow(_targetHandle) ||
+            NativeMethods.IsIconic(_targetHandle) ||
+            !NativeMethods.TryGetFrameBounds(_targetHandle, out var rect))
+        {
+            _targetOverlay.Hide();
+            _overlayDepthApplied = false;
+            _lastOverlayRect = null;
+            return;
+        }
+
+        if (!_targetOverlay.IsVisible)
+        {
+            _targetOverlay.Show();
+            _overlayDepthApplied = false;
+            _lastOverlayRect = null;
+        }
+
+        if (_lastOverlayRect is null || !AreSameRect(_lastOverlayRect.Value, rect))
+        {
+            _targetOverlay.SetBounds(rect);
+            _lastOverlayRect = rect;
+        }
+
+        if (!_overlayDepthApplied)
+        {
+            ApplyOverlayDepth();
+            _overlayDepthApplied = true;
+        }
+    }
+
+    private void ApplyOverlayDepth()
+    {
+        if (_targetOverlay is null)
+        {
+            return;
+        }
+
+        var dialogHandle = new WindowInteropHelper(this).Handle;
+        if (dialogHandle == IntPtr.Zero || _targetOverlay.Handle == IntPtr.Zero)
+        {
+            return;
+        }
+
+        NativeMethods.SetWindowTopmost(_targetOverlay.Handle, true);
+        NativeMethods.SetWindowTopmost(dialogHandle, true);
+        NativeMethods.SetWindowZOrder(_targetOverlay.Handle, dialogHandle);
+    }
+
+    private static bool AreSameRect(NativeMethods.Rect first, NativeMethods.Rect second)
+    {
+        return first.Left == second.Left &&
+            first.Top == second.Top &&
+            first.Right == second.Right &&
+            first.Bottom == second.Bottom;
     }
 
     private System.Windows.Point DeviceToDip(double x, double y)
