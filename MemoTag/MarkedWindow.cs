@@ -10,6 +10,9 @@ public sealed class MarkedWindow : IDisposable
     private const double FullScreenBottomLift = 0;
     private const double NoteGap = 10;
     private const double TitleBarNoteInset = 8;
+    private const double TitleButtonReserveWidth = 140;
+    private const double DefaultNoteLift = 9;
+    private const double DefaultNoteLeftShift = 100;
 
     private readonly BorderSegmentWindow _topBorder;
     private readonly BorderSegmentWindow _bottomBorder;
@@ -89,13 +92,11 @@ public sealed class MarkedWindow : IDisposable
         var noteWidth = Math.Max(_noteWindow.ActualWidth, _noteWindow.Width);
         var noteHeight = Math.Max(_noteWindow.ActualHeight, _noteWindow.Height);
 
-        var noteLeft = Clamp(
-            rect.Left + (edgeState.Left ? TitleBarNoteInset : 0),
-            screenBounds.Left + NoteGap,
-            screenBounds.Right - noteWidth - NoteGap);
-        var noteTop = ChooseVerticalNotePosition(rect.Top, rect.Bottom, noteHeight, screenBounds, edgeState);
+        var notePlacement = ChooseVerticalNotePosition(rect.Top, rect.Bottom, noteHeight, screenBounds, edgeState);
+        var noteLeft = ChooseHorizontalNotePosition(rect.Left, rect.Right, noteWidth, screenBounds);
 
-        _noteWindow.SetPosition(noteLeft, noteTop);
+        _noteWindow.SetAttachedToTopEdge(notePlacement.AttachedToTopEdge);
+        _noteWindow.SetPosition(noteLeft, notePlacement.Top);
         ApplyDepth(IsFullScreen(edgeState), edgeState.Top);
     }
 
@@ -171,32 +172,53 @@ public sealed class MarkedWindow : IDisposable
         return edgeState is { Left: true, Top: true, Right: true, Bottom: true };
     }
 
-    private static double ChooseVerticalNotePosition(
+    private static NotePlacement ChooseVerticalNotePosition(
         double targetTop,
         double targetBottom,
         double noteHeight,
         ScreenBounds screenBounds,
         ScreenEdgeState edgeState)
     {
-        var above = targetTop - noteHeight - NoteGap;
-        var below = targetBottom + NoteGap;
+        var visibleTop = screenBounds.Top;
+        var visibleBottom = Math.Min(screenBounds.Bottom, screenBounds.WorkingBottom);
+        var above = targetTop - noteHeight;
+        var below = targetBottom;
 
-        if (above >= screenBounds.Top)
+        if (above >= visibleTop)
         {
-            return above;
+            return new NotePlacement(above - DefaultNoteLift, AttachedToTopEdge: false, IsDefaultAbove: true);
         }
 
-        if (below + noteHeight <= screenBounds.Bottom)
+        if (below + noteHeight <= visibleBottom)
         {
-            return below;
+            return new NotePlacement(below, AttachedToTopEdge: true, IsDefaultAbove: false);
         }
 
-        if (edgeState.Top)
+        if (edgeState.Top || !CanFitWithinScreen(noteHeight, visibleTop, visibleBottom))
         {
-            return Clamp(targetTop + TitleBarNoteInset, screenBounds.Top + TitleBarNoteInset, screenBounds.Bottom - noteHeight - NoteGap);
+            return new NotePlacement(visibleTop, AttachedToTopEdge: true, IsDefaultAbove: false);
         }
 
-        return Clamp(above, screenBounds.Top + NoteGap, screenBounds.Bottom - noteHeight - NoteGap);
+        var insideTop = Clamp(targetTop, visibleTop, visibleBottom - noteHeight);
+        return new NotePlacement(insideTop, AttachedToTopEdge: true, IsDefaultAbove: false);
+    }
+
+    private static bool CanFitWithinScreen(double noteHeight, double visibleTop, double visibleBottom)
+    {
+        return noteHeight <= visibleBottom - visibleTop;
+    }
+
+    private static double ChooseHorizontalNotePosition(
+        double targetLeft,
+        double targetRight,
+        double noteWidth,
+        ScreenBounds screenBounds)
+    {
+        var preferred = targetRight - TitleButtonReserveWidth - noteWidth - TitleBarNoteInset - DefaultNoteLeftShift;
+        var min = Math.Max(targetLeft + NoteGap, screenBounds.Left + NoteGap);
+        var max = Math.Min(targetRight - noteWidth - NoteGap, screenBounds.Right - noteWidth - NoteGap);
+
+        return Clamp(preferred, min, max);
     }
 
     private static double Clamp(double value, double min, double max)
@@ -282,4 +304,6 @@ public sealed class MarkedWindow : IDisposable
     private readonly record struct ScreenBounds(double Left, double Top, double Right, double Bottom, double WorkingBottom);
 
     private readonly record struct ScreenEdgeState(bool Left, bool Top, bool Right, bool Bottom);
+
+    private readonly record struct NotePlacement(double Top, bool AttachedToTopEdge, bool IsDefaultAbove);
 }
