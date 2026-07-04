@@ -70,13 +70,13 @@ public sealed class MarkedWindow : IDisposable
         var edgeState = GetScreenEdgeState(rect, screenBounds);
 
         var borderLeft = edgeState.Left
-            ? rect.Left - BorderThickness + ScreenEdgeInnerOverlap
+            ? screenBounds.Left
             : rect.Left - BorderThickness;
         var borderTop = edgeState.Top
             ? screenBounds.Top
             : rect.Top - BorderThickness;
         var borderRight = edgeState.Right
-            ? rect.Right - ScreenEdgeInnerOverlap
+            ? screenBounds.Right - BorderThickness
             : rect.Right;
         var borderBottom = edgeState.Bottom
             ? Math.Min(rect.Bottom, screenBounds.WorkingBottom) - BorderThickness - FullScreenBottomLift
