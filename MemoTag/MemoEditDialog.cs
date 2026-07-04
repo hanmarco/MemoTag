@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Markup;
 using System.Windows.Media;
 using Button = System.Windows.Controls.Button;
@@ -26,11 +27,13 @@ public sealed class MemoEditDialog : Window
     private readonly TextBox _messageBox;
     private readonly ComboBox _presetBox;
     private readonly Color _initialColor;
+    private readonly IntPtr _targetHandle;
 
     public MarkerEditResult Result { get; private set; } = new(MarkerDialogAction.Cancel, string.Empty, Presets[0].Color);
 
-    public MemoEditDialog(string windowTitle, string currentNote, Color currentColor, bool allowRemove)
+    public MemoEditDialog(IntPtr targetHandle, string windowTitle, string currentNote, Color currentColor, bool allowRemove)
     {
+        _targetHandle = targetHandle;
         _initialColor = currentColor;
 
         Title = allowRemove ? "MemoTag 메시지 수정" : "MemoTag 메시지 설정";
@@ -39,7 +42,7 @@ public sealed class MemoEditDialog : Window
         ResizeMode = ResizeMode.NoResize;
         ShowInTaskbar = false;
         Topmost = true;
-        WindowStartupLocation = WindowStartupLocation.CenterScreen;
+        WindowStartupLocation = WindowStartupLocation.Manual;
         WindowStyle = WindowStyle.None;
         Background = WpfBrushes.Transparent;
         AllowsTransparency = true;
@@ -102,6 +105,7 @@ public sealed class MemoEditDialog : Window
 
         Loaded += (_, _) =>
         {
+            CenterOverTarget();
             _messageBox.Focus();
             _messageBox.SelectAll();
         };
@@ -176,6 +180,50 @@ public sealed class MemoEditDialog : Window
         titleBar.Children.Add(name);
         titleBar.Children.Add(controls);
         return titleBarShell;
+    }
+
+    private void CenterOverTarget()
+    {
+        UpdateLayout();
+
+        if (!NativeMethods.TryGetFrameBounds(_targetHandle, out var rect))
+        {
+            CenterOverScreen();
+            return;
+        }
+
+        var width = ActualWidth > 0 ? ActualWidth : Width;
+        var height = ActualHeight > 0 ? ActualHeight : Height;
+        var screen = System.Windows.Forms.Screen.FromHandle(_targetHandle).WorkingArea;
+        var targetTopLeft = DeviceToDip(rect.Left, rect.Top);
+        var targetSize = DeviceToDip(rect.Width, rect.Height);
+        var screenTopLeft = DeviceToDip(screen.Left, screen.Top);
+        var screenBottomRight = DeviceToDip(screen.Right, screen.Bottom);
+
+        var left = targetTopLeft.X + ((targetSize.X - width) / 2);
+        var top = targetTopLeft.Y + ((targetSize.Y - height) / 2);
+
+        Left = Clamp(left, screenTopLeft.X, screenBottomRight.X - width);
+        Top = Clamp(top, screenTopLeft.Y, screenBottomRight.Y - height);
+    }
+
+    private void CenterOverScreen()
+    {
+        var width = ActualWidth > 0 ? ActualWidth : Width;
+        var height = ActualHeight > 0 ? ActualHeight : Height;
+        var screen = System.Windows.Forms.Screen.PrimaryScreen?.WorkingArea ?? System.Windows.Forms.Screen.FromPoint(System.Windows.Forms.Cursor.Position).WorkingArea;
+        var screenTopLeft = DeviceToDip(screen.Left, screen.Top);
+        var screenSize = DeviceToDip(screen.Width, screen.Height);
+
+        Left = screenTopLeft.X + ((screenSize.X - width) / 2);
+        Top = screenTopLeft.Y + ((screenSize.Y - height) / 2);
+    }
+
+    private System.Windows.Point DeviceToDip(double x, double y)
+    {
+        var source = PresentationSource.FromVisual(this) as HwndSource;
+        var transform = source?.CompositionTarget?.TransformFromDevice ?? Matrix.Identity;
+        return transform.Transform(new System.Windows.Point(x, y));
     }
 
     private static UIElement CreateTargetBlock(string windowTitle)
@@ -605,6 +653,16 @@ public sealed class MemoEditDialog : Window
     private static SolidColorBrush Brush(string hex)
     {
         return (SolidColorBrush)new BrushConverter().ConvertFromString(hex)!;
+    }
+
+    private static double Clamp(double value, double min, double max)
+    {
+        if (max < min)
+        {
+            return min;
+        }
+
+        return Math.Min(Math.Max(value, min), max);
     }
 
     private sealed record MessagePreset(string Name, string Message, Color Color)

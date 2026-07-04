@@ -33,7 +33,7 @@ public sealed class WindowMarkerService : IDisposable
         }
 
         var title = NativeMethods.GetWindowTitle(hwnd);
-        var dialog = new MemoEditDialog(title, "닫지 마세요.", System.Windows.Media.Color.FromRgb(255, 193, 7), allowRemove: false);
+        var dialog = new MemoEditDialog(hwnd, title, "닫지 마세요.", System.Windows.Media.Color.FromRgb(255, 193, 7), allowRemove: false);
         var accepted = dialog.ShowDialog() == true;
         if (!accepted || dialog.Result.Action != MarkerDialogAction.Save)
         {
@@ -74,7 +74,7 @@ public sealed class WindowMarkerService : IDisposable
 
     private void ShowEditDialog(MarkedWindow marker)
     {
-        var dialog = new MemoEditDialog(marker.Title, marker.Note, marker.Color, allowRemove: true);
+        var dialog = new MemoEditDialog(marker.Handle, marker.Title, marker.Note, marker.Color, allowRemove: true);
         var accepted = dialog.ShowDialog() == true;
         if (!accepted)
         {
