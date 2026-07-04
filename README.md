@@ -62,6 +62,29 @@ dotnet run --project .\MemoTag\MemoTag.csproj -c Release
 MemoTag\bin\Release\net8.0-windows\MemoTag.exe
 ```
 
+## 설치 파일 만들기
+
+필요 환경:
+
+- Windows
+- .NET 8 SDK
+- Inno Setup 6
+
+설치 파일 생성:
+
+```powershell
+.\build-installer.ps1
+```
+
+생성된 설치 파일:
+
+```text
+dist\MemoTagSetup-1.0.0.exe
+```
+
+설치 중 추가 작업 화면에서 `Windows 시작 시 MemoTag 실행`을 선택하면 현재 사용자 시작 프로그램에 MemoTag가 등록됩니다.
+이때 Windows 로그인 후 `MemoTag.exe --startup`으로 실행되며, 앱은 창을 띄우지 않고 트레이에 조용히 표시됩니다.
+
 ## 동작 방식
 
 MemoTag는 대상 창을 직접 수정하지 않습니다. 대상 창의 위치와 크기를 주기적으로 읽고, 별도의 overlay 창으로 테두리와 메모를 표시합니다.

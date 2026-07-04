@@ -93,11 +93,14 @@ public partial class MainWindow : Window
         };
 
         _trayIcon.DoubleClick += (_, _) => _markerService.MarkOrEditForegroundWindow();
-        _trayIcon.ShowBalloonTip(
-            3000,
-            "MemoTag",
-            "Ctrl+Alt+M: 현재 앱에 테두리와 메모를 남깁니다.\nCtrl+Alt+Shift+M: 현재 앱 표시를 해제합니다.",
-            System.Windows.Forms.ToolTipIcon.Info);
+        if (!App.IsStartupLaunch)
+        {
+            _trayIcon.ShowBalloonTip(
+                3000,
+                "MemoTag",
+                "Ctrl+Alt+M: 현재 앱에 테두리와 메모를 남깁니다.\nCtrl+Alt+Shift+M: 현재 앱 표시를 해제합니다.",
+                System.Windows.Forms.ToolTipIcon.Info);
+        }
     }
 
     private void ShowAboutDialog()
